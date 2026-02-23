@@ -1,0 +1,31 @@
+{
+  "model_name": "medgemma-1.5-4b",
+  "quantization_bits": 4,
+  "device": "cpu",
+  "max_memory_gb": 2.0,
+  "inference_config": {
+    "max_new_tokens": 120,
+    "temperature": 0.0,
+    "do_sample": false,
+    "device": "cpu"
+  },
+  "inputs": {
+    "prompt_text": {
+      "type": "String",
+      "description": "PCDC prompt with patient context"
+    },
+    "biomarkers": {
+      "type": "Float32 array",
+      "shape": [
+        9
+      ],
+      "description": "9 acoustic features from Phase 1.4"
+    }
+  },
+  "outputs": {
+    "json_output": {
+      "type": "String",
+      "description": "PCDC JSON with agitation, trend, keywords, nudges"
+    }
+  }
+}

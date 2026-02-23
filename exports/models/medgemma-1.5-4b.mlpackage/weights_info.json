@@ -1,0 +1,6 @@
+{
+  "total_parameters": 4971331952,
+  "quantization_method": "per-channel linear 4-bit",
+  "compressed_size_mb": 2370.515800476074,
+  "compression_ratio": 8.0
+}

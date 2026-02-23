@@ -1,0 +1,43 @@
+{
+  "conversion_info": {
+    "phase": 3,
+    "model_name": "medgemma-1.5-4b",
+    "quantization": "4-bit",
+    "max_memory_gb": 2.0,
+    "device": "cpu"
+  },
+  "inputs": {
+    "prompt_text": {
+      "type": "String",
+      "description": "PCDC prompt with patient context, keywords, biomarkers"
+    },
+    "biomarkers": {
+      "type": "Float32 array",
+      "shape": [
+        9
+      ],
+      "features": [
+        "articulation_variability",
+        "spectral_tilt",
+        "loudness_mean",
+        "loudness_variability",
+        "intensity_score",
+        "loudness_peaks_per_sec",
+        "spectral_clarity_score",
+        "voiced_segments_per_sec",
+        "spectral_flux"
+      ]
+    }
+  },
+  "outputs": {
+    "json_output": {
+      "type": "String",
+      "schema": {
+        "agitation": "integer 0-10",
+        "trend": "string describing change vs prior",
+        "keywords": "array of max 3 strings",
+        "nudges": "array of 1-2 PCDC nudge strings"
+      }
+    }
+  }
+}
