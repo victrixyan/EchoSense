@@ -1,8 +1,52 @@
+# 1. Python & Machine Learning (Phases 1-2)
+
+__pycache__/
+*.py[cod]
+*$py.class
 .venv/
-EchoSense_Assets/
-*.safetensors
-*.mlpackage
-.DS_Store
-.github
+venv/
+ENV/
 .env
+.ipynb_checkpoints/
+assets/data/raw/
+exports/temp_*
+
+# 2. Xcode & iOS (Phases 3-5)
+
+build/
+DerivedData/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+.swiftpm/
+.build/
+
+# 3. OpenSMILE & Libraries
+
+opensmile/
+*.o
+*.a
+*.framework/
+
+# 4. OS & Environment
+
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+.vscode/
+.github/copilot/
+
+# 5. Assets
+
 assets/
