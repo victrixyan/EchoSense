@@ -1,0 +1,8 @@
+.venv/
+EchoSense_Assets/
+*.safetensors
+*.mlpackage
+.DS_Store
+.github
+.env
+assets/
