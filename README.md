@@ -11,7 +11,7 @@ Real-time AI communication assistant for dementia caregivers. Analyzes speech ac
 - 📱 **On-device inference** — privacy-first, works offline
 - 💾 **Rolling memory** — adapts to patient history across sessions
 
-![demo UI](media/demo_ui5.png)
+![demo UI](media/demoUI.png)
 
 ## 🔬 Technical Details
 
@@ -31,12 +31,12 @@ Real-time AI communication assistant for dementia caregivers. Analyzes speech ac
 
 **Data**: 232 samples from [DementiaNet](https://github.com/shreyasgite/dementianet) (116 dementia, 116 controls)
 
-##   Model
+## Model
 
 - **Base**: MedGemma-1.5-4b (4.1B params)
 - **Quantization**: 4-bit per-channel (16GB → 2GB, 8× compression)
 
-### 🔮 Status & Roadmap
+## Status
 
 ### ✅ Done
 - Extracted and validated 9 acoustic biomarkers from DementiaNet audio.
