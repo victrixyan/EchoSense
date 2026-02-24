@@ -9,9 +9,13 @@ import SwiftUI
 
 @main
 struct EchoSenseApp: App {
+    @StateObject private var viewModel = MainViewModel()
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            NavigationStack {
+                MainView(viewModel: viewModel)
+            }
         }
     }
 }

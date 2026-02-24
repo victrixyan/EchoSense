@@ -95,7 +95,7 @@ class DemoTestHarness {
     
     /// Generate expected PCDC model output for a scenario
     static func generateMockPCDCOutput(for scenario: DemoScenario, patientContext: String) -> String {
-        let contextSummary = patientContext.isEmpty ? "Unknown patient" : patientContext
+        _ = patientContext.isEmpty ? "Unknown patient" : patientContext
         
         switch scenario {
         case .calm:
@@ -104,7 +104,7 @@ class DemoTestHarness {
                 "agitation_score": 2,
                 "trend": "stable and calm",
                 "keywords": ["gardening", "family memories"],
-                "recommendations": ["Continue current activity", "Offer familiar topics"]
+                "recommendations": ["You're at home here with us, and I'm right here with you.", "You always light up when you talk about your garden. What did you enjoy growing?"]
             }
             """
             
@@ -113,8 +113,8 @@ class DemoTestHarness {
             {
                 "agitation_score": 6,
                 "trend": "increasing confusion",
-                "keywords": ["time confusion", "where am I", "repetitive questions"],
-                "recommendations": ["Gently redirect", "Offer reassurance and grounding"]
+                "keywords": ["time confusion", "where am I"],
+                "recommendations": ["I can see something's troubling you. Take your time; I'm listening.", "You're safe here, and I'm staying with you. We'll work this out together."]
             }
             """
             
@@ -123,8 +123,8 @@ class DemoTestHarness {
             {
                 "agitation_score": 9,
                 "trend": "heightened emotional distress",
-                "keywords": ["anxiety", "agitation", "disorientation"],
-                "recommendations": ["Call for caregiver support", "Ensure safety", "Consider environment change"]
+                "keywords": ["anxiety", "distress"],
+                "recommendations": ["You seem really upset. I want to understand what's happening for you.", "Let's pause for a moment and take a breath together. You are safe."]
             }
             """
             
@@ -133,12 +133,57 @@ class DemoTestHarness {
             {
                 "agitation_score": 4,
                 "trend": "calming response to intervention",
-                "keywords": ["settling", "responding to comfort"],
-                "recommendations": ["Maintain calm approach", "Reinforce with familiar items"]
+                "keywords": ["settling", "comfort"],
+                "recommendations": ["You're doing so well. What helped you feel better just now?", "You've shown such strength. Tell me about someone you really loved."]
             }
             """
         }
     }
+    
+    /// Generate keywords for a demo scenario
+    static func generateKeywords(for scenario: DemoScenario) -> [String] {
+        switch scenario {
+        case .calm:
+            return ["gardening", "family memories", "peaceful"]
+        case .moderate:
+            return ["confusion", "repetition", "where am I"]
+        case .escalated:
+            return ["anxiety", "distress", "agitation"]
+        case .recovery:
+            return ["settling", "comfort", "responding"]
+        }
+    }
+    
+    /// Generate nudges/recommendations for a demo scenario
+    static func generateNudges(for scenario: DemoScenario) -> [String] {
+        switch scenario {
+        case .calm:
+            // Validation therapy: Encourage reminiscence and meaningful conversation
+            return [
+                "You're at home here with us, and I'm right here with you.",
+                "You always light up when you talk about your garden. What did you enjoy growing?"
+            ]
+        case .moderate:
+            // Validation therapy: Acknowledge feelings, offer reassurance
+            return [
+                "I can see something's troubling you. Take your time; I'm listening.",
+                "You're safe here, and I'm staying with you. We'll work this out together."
+            ]
+        case .escalated:
+            // Crisis intervention: Immediate grounding and safety
+            return [
+                "You seem really upset. I want to understand what's happening for you.",
+                "Let's pause for a moment and take a breath together. You are safe."
+            ]
+        case .recovery:
+            // Validation therapy: Reinforce calm, continue meaningful engagement
+            return [
+                "You're doing so well. What helped you feel better just now?",
+                "You've shown such strength. Tell me about someone you really loved."
+            ]
+        }
+    }
+    
     
     /// Simulate a full demo sequence for testing UI animations
     static func runDemoSequence(

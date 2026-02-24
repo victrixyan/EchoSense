@@ -9,6 +9,7 @@ import Foundation
 import CoreML
 import Combine
 import os.log
+import SwiftUI
 
 /// Main ViewModel orchestrating the complete EchoSense inference pipeline.
 /// Manages audio capture, feature extraction, CoreML inference, UI state, and session memory persistence.
@@ -17,7 +18,7 @@ class MainViewModel: ObservableObject {
     
     private let logger = Logger(subsystem: "com.echosense.viewmodel", category: "inference")
     private let memoryManager: MemoryManager
-    private let speechManager: SpeechManager
+    let speechManager: SpeechManager
     
     // MARK: - Published UI State (Observable)
     
@@ -51,10 +52,12 @@ class MainViewModel: ObservableObject {
     
     private var coreMLModel: MLModel?
     private var smile: SMILEBridge?
+    private var demoMode = false // Enable demo inference when CoreML model unavailable
     private let inferenceQueue = DispatchQueue(label: "com.echosense.inference", qos: .userInitiated)
     private var assessmentHistory: [AssessmentResult] = []
     private var turnCount = 0
     private var recordingInProgress = false
+    private var currentDemoScenario = DemoTestHarness.DemoScenario.calm
     
     // MARK: - Assessment Result Structure
     
@@ -97,7 +100,15 @@ class MainViewModel: ObservableObject {
         inferenceQueue.async { [weak self] in
             do {
                 guard let modelPath = self?.findModelPath() else {
-                    throw ModelError.modelNotFound
+                    // Enable demo mode instead of throwing error
+                    DispatchQueue.main.async {
+                        self?.demoMode = true
+                        self?.modelLoaded = true
+                        self?.isProcessing = false
+                        self?.errorMessage = "(Demo Mode - CoreML model not found, using synthetic inference)"
+                        self?.logger.info("Demo mode enabled - using synthetic inference")
+                    }
+                    return
                 }
                 
                 let modelURL = URL(fileURLWithPath: modelPath)
@@ -108,15 +119,20 @@ class MainViewModel: ObservableObject {
                 
                 DispatchQueue.main.async {
                     self?.coreMLModel = model
+                    self?.demoMode = false
                     self?.modelLoaded = true
                     self?.isProcessing = false
+                    self?.errorMessage = nil
                     self?.logger.info("CoreML model loaded successfully")
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self?.errorMessage = "Failed to load model: \(error.localizedDescription)"
+                    // Fall back to demo mode on error
+                    self?.demoMode = true
+                    self?.modelLoaded = true
                     self?.isProcessing = false
-                    self?.logger.error("Model loading error: \(error.localizedDescription)")
+                    self?.errorMessage = "(Demo Mode - \(error.localizedDescription))"
+                    self?.logger.error("Model loading error, falling back to demo mode: \(error.localizedDescription)")
                 }
             }
         }
@@ -194,39 +210,67 @@ class MainViewModel: ObservableObject {
             smile.initialize(Int32(audioData.sampleRate))
             
             let audioBuffer = audioData.pcmBuffer
-            let features = smile.extractFeaturesNormalized(audioBuffer, Int32(audioBuffer.count))
+            let featuresNSNumbers = smile.extractFeaturesNormalized(audioBuffer, length: Int32(audioBuffer.count))
+            let features = featuresNSNumbers.compactMap { $0.floatValue }
             
             logger.info("Extracted \(features.count) acoustic features")
             
-            // 2. Build PCDC-enhanced prompt with memory and context
-            let pcdc_prompt = buildPCDCPrompt(
-                basePrompt: patientPrompt,
-                audioFeatures: features,
-                sessionMemory: memoryManager.currentSession
-            )
-            
-            // 3. Create CoreML inputs
-            let featureProvider = try createFeatureProvider(
-                promptText: pcdc_prompt,
-                biomarkers: features
-            )
-            
-            // 4. Run CoreML inference
-            guard let model = coreMLModel else { throw ModelError.modelNotLoaded }
-            let output = try model.prediction(from: featureProvider)
-            
-            // 5. Extract JSON output
-            var jsonString = ""
-            if let outputValue = output.featureValue(for: "json_output")?.stringValue {
-                jsonString = outputValue
-            }
-            
             let inferenceTime = Date().timeIntervalSince(startTime) * 1000
-            let result = parseInferenceOutput(
-                jsonOutput: jsonString,
-                audioFeatures: features,
-                inferenceTimeMs: inferenceTime
-            )
+            
+            // Demo mode vs real inference
+            let result: AssessmentResult
+            
+            if demoMode {
+                // Use synthetic demo inference
+                let biomarkers = DemoTestHarness.generateBiomarkers(for: currentDemoScenario)
+                let mockOutput = DemoTestHarness.generateMockPCDCOutput(
+                    for: currentDemoScenario,
+                    patientContext: patientPrompt
+                )
+                result = AssessmentResult(
+                    agitation: extractAgitationScores(from: biomarkers).0,
+                    trend: determineTrend(from: biomarkers),
+                    keywords: DemoTestHarness.generateKeywords(for: currentDemoScenario),
+                    nudges: DemoTestHarness.generateNudges(for: currentDemoScenario),
+                    confidence: 0.85,
+                    inferenceTimeMs: inferenceTime,
+                    rawOutput: mockOutput
+                )
+                
+                // Rotate through demo scenarios
+                let scenarios = DemoTestHarness.DemoScenario.allCases
+                if let currentIndex = scenarios.firstIndex(of: currentDemoScenario) {
+                    let nextIndex = (currentIndex + 1) % scenarios.count
+                    currentDemoScenario = scenarios[nextIndex]
+                }
+                
+            } else {
+                // Real CoreML inference
+                let pcdc_prompt = buildPCDCPrompt(
+                    basePrompt: patientPrompt,
+                    audioFeatures: features,
+                    sessionMemory: memoryManager.currentSession
+                )
+                
+                let featureProvider = try createFeatureProvider(
+                    promptText: pcdc_prompt,
+                    biomarkers: features
+                )
+                
+                guard let model = coreMLModel else { throw ModelError.modelNotLoaded }
+                let output = try model.prediction(from: featureProvider)
+                
+                var jsonString = ""
+                if let outputValue = output.featureValue(for: "json_output")?.stringValue {
+                    jsonString = outputValue
+                }
+                
+                result = parseInferenceOutput(
+                    jsonOutput: jsonString,
+                    audioFeatures: features,
+                    inferenceTimeMs: inferenceTime
+                )
+            }
             
             // 6. Update UI with smooth animations
             DispatchQueue.main.async {
@@ -237,20 +281,23 @@ class MainViewModel: ObservableObject {
                 
                 // Auto-save every 5 turns
                 if self.turnCount % 5 == 0 {
+                    let features = self.demoMode ?
+                        DemoTestHarness.generateBiomarkers(for: self.currentDemoScenario) :
+                        [Float]()
                     self.memoryManager.addAssessment(
                         agitation: result.agitation,
                         trend: result.trend,
                         keywords: result.keywords,
                         nudges: result.nudges,
                         audioFeatures: features,
-                        modelVersion: "medgemma-1.5-4b",
-                        inferenceTimeMs: inferenceTime,
-                        tokenCount: jsonString.split(separator: " ").count,
+                        modelVersion: self.demoMode ? "demo-v1" : "medgemma-1.5-4b",
+                        inferenceTimeMs: result.inferenceTimeMs,
+                        tokenCount: result.rawOutput.split(separator: " ").count,
                         confidence: result.confidence
                     )
                 }
                 
-                self.logger.info("Assessment complete: agitation=\(result.agitation), trend=\(result.trend)")
+                self.logger.info("Assessment complete: agitation=\(result.agitation), trend=\(result.trend), demoMode=\(self.demoMode)")
             }
             
         } catch {
@@ -280,9 +327,7 @@ class MainViewModel: ObservableObject {
         trendUpdateTimer?.invalidate()
         trendUpdateTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { [weak self] _ in
             DispatchQueue.main.async {
-                withAnimation(.easeOut(duration: 0.3)) {
-                    self?.trendFadeOut = true
-                }
+                self?.trendFadeOut = true
             }
         }
         
@@ -308,9 +353,7 @@ class MainViewModel: ObservableObject {
                     repeats: false
                 ) { [weak self] _ in
                     DispatchQueue.main.async {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            self?.nudgeFadeOut = true
-                        }
+                        self?.nudgeFadeOut = true
                     }
                 }
             }
@@ -386,13 +429,14 @@ class MainViewModel: ObservableObject {
             throw ModelError.invalidAudioFeatures
         }
         
-        let shape: [NSNumber] = [9]
-        let biomarkerValue = try MLMultiArray(
-            dataPointer: UnsafeMutablePointer(mutating: biomarkers),
-            shape: shape,
-            dataType: .float32,
-            strides: [1]
-        )
+        let shape: [NSNumber] = [NSNumber(value: 9)]
+        let biomarkerValue = try MLMultiArray(shape: shape, dataType: .float32)
+        
+        // Copy biomarker data into MLMultiArray
+        for i in 0..<min(9, biomarkers.count) {
+            biomarkerValue[i] = NSNumber(value: biomarkers[i])
+        }
+        
         features["biomarkers"] = MLFeatureValue(multiArray: biomarkerValue)
         
         return try MLDictionaryFeatureProvider(dictionary: features)
@@ -409,13 +453,13 @@ class MainViewModel: ObservableObject {
         var trend = "stable"
         var keywords = [String]()
         var nudges = [String]()
-        var confidence = 0.75
+        var confidence: Float = 0.75
         
         if let data = jsonOutput.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             
             if let ag = json["agitation"] as? Int {
-                agitation = min(10, max(0, ag))
+                agitation = min(9, max(0, ag))
             }
             if let tr = json["trend"] as? String {
                 trend = tr
@@ -452,6 +496,49 @@ class MainViewModel: ObservableObject {
         )
     }
     
+    // MARK: - Demo Mode Helpers
+    
+    /// Extract agitation score from biomarker features
+    private func extractAgitationScores(from biomarkers: [Float]) -> (Int, Float) {
+        guard biomarkers.count >= 9 else { return (5, 0.5) }
+        
+        // Map biomarkers to agitation (0-10 scale)
+        let articulation = biomarkers[0]      // 0-1: higher = more unclear
+        let spectralTilt = biomarkers[1]      // dB: higher = more tension
+        let loudnessVar = biomarkers[3]       // dB: higher = more variable
+        let emotionalScore = biomarkers[4]    // 0-1: higher = more emotional
+        let spectralFlux = biomarkers[8]      // 0-1: higher = more chaotic
+        
+        // Weighted combination for agitation
+        let score = (articulation * 2.0 + spectralTilt / 20.0 + loudnessVar / 3.0 + 
+                     emotionalScore * 4.0 + spectralFlux * 2.0) / 10.0
+        let agitation = Int(min(9, max(0, score * 10)))
+        let confidence = max(0.5, articulation + spectralFlux) / 2.0
+        
+        return (agitation, Float(confidence))
+    }
+    
+    /// Determine trend from biomarker features
+    private func determineTrend(from biomarkers: [Float]) -> String {
+        guard biomarkers.count >= 9 else { return "stable" }
+        
+        let loudnessVar = biomarkers[3]
+        let emotionalScore = biomarkers[4]
+        let spectralFlux = biomarkers[8]
+        
+        if loudnessVar > 5.0 && emotionalScore > 0.7 {
+            return "escalating agitation"
+        } else if loudnessVar < 2.0 && emotionalScore < 0.4 {
+            return "calm and stable"
+        } else if spectralFlux > 0.6 {
+            return "chaotic speech patterns"
+        } else if emotionalScore > 0.6 {
+            return "heightened emotion"
+        } else {
+            return "stable"
+        }
+    }
+    
     // MARK: - Timer Management
     
     private func stopAllTimers() {
@@ -463,285 +550,6 @@ class MainViewModel: ObservableObject {
     }
     
     // MARK: - Error Types
-    
-    enum ModelError: LocalizedError {
-        case modelNotFound
-        case modelNotLoaded
-        case bridgeNotInitialized
-        case invalidAudioFeatures
-        
-        var errorDescription: String? {
-            switch self {
-            case .modelNotFound:
-                return "CoreML model file not found"
-            case .modelNotLoaded:
-                return "Model not loaded yet"
-            case .bridgeNotInitialized:
-                return "OpenSMILE bridge initialization failed"
-            case .invalidAudioFeatures:
-                return "Invalid audio features extracted"
-            }
-        }
-    }
-}
-
-    
-    private var coreMLModel: MLModel?
-    private var smile: SMILEBridge?
-    private let inferenceQueue = DispatchQueue(label: "com.echosense.inference", qos: .userInitiated)
-    
-    // MARK: - Inference Result
-    
-    struct AssessmentResult: Identifiable {
-        let id = UUID()
-        let agitation: Int  // 0-10
-        let trend: String
-        let keywords: [String]
-        let nudges: [String]
-        let confidence: Float
-        let inferenceTimeMs: Double
-        let rawOutput: String
-    }
-    
-    // MARK: - Lifecycle
-    
-    init(
-        memoryManager: MemoryManager = MemoryManager(),
-        speechManager: SpeechManager = SpeechManager()
-    ) {
-        self.memoryManager = memoryManager
-        self.speechManager = speechManager
-        self.smile = SMILEBridge()
-        
-        loadCoreMLModel()
-    }
-    
-    // MARK: - Model Loading
-    
-    func loadCoreMLModel() {
-        DispatchQueue.main.async {
-            self.isProcessing = true
-        }
-        
-        inferenceQueue.async { [weak self] in
-            do {
-                // Locate medgemma-1.5-4b.mlpackage in app bundle or documents
-                guard let modelPath = self?.findModelPath() else {
-                    throw ModelError.modelNotFound
-                }
-                
-                let modelURL = URL(fileURLWithPath: modelPath)
-                let config = MLModelConfiguration()
-                config.computeUnits = .cpuAndNeuralEngine
-                
-                let model = try MLModel(contentsOf: modelURL, configuration: config)
-                
-                DispatchQueue.main.async {
-                    self?.coreMLModel = model
-                    self?.modelLoaded = true
-                    self?.isProcessing = false
-                    self?.logger.info("CoreML model loaded successfully")
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self?.errorMessage = "Failed to load model: \(error.localizedDescription)"
-                    self?.isProcessing = false
-                    self?.logger.error("Model loading error: \(error.localizedDescription)")
-                }
-            }
-        }
-    }
-    
-    private func findModelPath() -> String? {
-        let fileManager = FileManager.default
-        let documentDir = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let modelPath = documentDir.appendingPathComponent("medgemma-1.5-4b.mlpackage").path
-        
-        if fileManager.fileExists(atPath: modelPath) {
-            return modelPath
-        }
-        
-        // Fallback: check app bundle
-        if let bundlePath = Bundle.main.path(forResource: "medgemma-1.5-4b", ofType: "mlpackage") {
-            return bundlePath
-        }
-        
-        return nil
-    }
-    
-    // MARK: - Inference Pipeline
-    
-    func runAssessment(patientPrompt: String) {
-        guard let audioData = speechManager.stopRecording() else {
-            errorMessage = "No audio recorded"
-            return
-        }
-        
-        guard modelLoaded else {
-            errorMessage = "Model not loaded"
-            return
-        }
-        
-        DispatchQueue.main.async {
-            self.isProcessing = true
-            self.errorMessage = nil
-        }
-        
-        inferenceQueue.async { [weak self] in
-            self?.performInference(
-                audioData: audioData,
-                patientPrompt: patientPrompt
-            )
-        }
-    }
-    
-    private func performInference(audioData: SpeechManager.AudioRecordingData, patientPrompt: String) {
-        let startTime = Date()
-        
-        do {
-            // 1. Extract acoustic features via SMILEBridge
-            guard let smile = smile else { throw ModelError.bridgeNotInitialized }
-            smile.initialize(Int32(audioData.sampleRate))
-            
-            let audioBuffer = audioData.pcmBuffer
-            let features = smile.extractFeaturesNormalized(audioBuffer, Int32(audioBuffer.count))
-            
-            logger.info("Extracted \(features.count) acoustic features")
-            
-            // 2. Prepare CoreML inputs
-            let featureProvider = try createFeatureProvider(
-                promptText: patientPrompt,
-                biomarkers: features
-            )
-            
-            // 3. Run CoreML inference
-            guard let model = coreMLModel else { throw ModelError.modelNotLoaded }
-            let output = try model.prediction(from: featureProvider)
-            
-            // 4. Parse PCDC output
-            var jsonString = ""
-            if let outputValue = output.featureValue(for: "json_output")?.stringValue {
-                jsonString = outputValue
-            }
-            
-            let result = parseInferenceOutput(
-                jsonOutput: jsonString,
-                audioFeatures: features,
-                inferenceTimeMs: Date().timeIntervalSince(startTime) * 1000
-            )
-            
-            // 5. Store in memory management and update UI
-            DispatchQueue.main.async {
-                self.assessmentResult = result
-                self.isProcessing = false
-                
-                self.memoryManager.addAssessment(
-                    agitation: result.agitation,
-                    trend: result.trend,
-                    keywords: result.keywords,
-                    nudges: result.nudges,
-                    audioFeatures: features,
-                    modelVersion: "medgemma-1.5-4b",
-                    inferenceTimeMs: result.inferenceTimeMs,
-                    tokenCount: jsonString.split(separator: " ").count,
-                    confidence: result.confidence
-                )
-                
-                self.logger.info("Assessment complete: agitation=\(result.agitation), time=\(result.inferenceTimeMs)ms")
-            }
-            
-        } catch {
-            DispatchQueue.main.async {
-                self.errorMessage = "Inference failed: \(error.localizedDescription)"
-                self.isProcessing = false
-                self.logger.error("Inference error: \(error.localizedDescription)")
-            }
-        }
-    }
-    
-    // MARK: - Feature Provider Creation
-    
-    private func createFeatureProvider(
-        promptText: String,
-        biomarkers: [Float]
-    ) throws -> MLFeatureProvider {
-        var features = [String: MLFeatureValue]()
-        
-        // Add prompt text input
-        features["prompt_text"] = MLFeatureValue(string: promptText)
-        
-        // Add biomarkers (9 features) as multi-array
-        guard biomarkers.count >= 9 else {
-            throw ModelError.invalidAudioFeatures
-        }
-        
-        let shape: [NSNumber] = [9]
-        let biomarkerValue = try MLMultiArray(dataPointer: UnsafeMutablePointer(mutating: biomarkers),
-                                            shape: shape,
-                                            dataType: .float32,
-                                            strides: [1])
-        features["biomarkers"] = MLFeatureValue(multiArray: biomarkerValue)
-        
-        return try MLDictionaryFeatureProvider(dictionary: features)
-    }
-    
-    // MARK: - Output Parsing
-    
-    private func parseInferenceOutput(
-        jsonOutput: String,
-        audioFeatures: [Float],
-        inferenceTimeMs: Double
-    ) -> AssessmentResult {
-        var agitation = 5
-        var trend = "stable"
-        var keywords = ["speech quality normal"]
-        var nudges = [String]()
-        var confidence = 0.75
-        
-        // Parse JSON output (simplified parser for PCDC format)
-        if let data = jsonOutput.data(using: .utf8),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            
-            if let ag = json["agitation"] as? Int {
-                agitation = min(10, max(0, ag))  // Clamp to 0-10
-            }
-            if let tr = json["trend"] as? String {
-                trend = tr
-            }
-            if let kw = json["keywords"] as? [String] {
-                keywords = Array(kw.prefix(3))
-            }
-            if let nu = json["nudges"] as? [String] {
-                nudges = Array(nu.prefix(2))
-            }
-            if let conf = json["confidence"] as? NSNumber {
-                confidence = Float(truncating: conf)
-            }
-        }
-        
-        // Infer trend from audio features if not provided
-        if audioFeatures.count >= 9 {
-            let loudnessVariability = audioFeatures[3]
-            let articulationVar = audioFeatures[0]
-            
-            if loudnessVariability > 0.5 || articulationVar > 0.4 {
-                trend = "increasing"
-                agitation = min(10, agitation + 2)
-            }
-        }
-        
-        return AssessmentResult(
-            agitation: agitation,
-            trend: trend,
-            keywords: keywords,
-            nudges: nudges,
-            confidence: confidence,
-            inferenceTimeMs: inferenceTimeMs,
-            rawOutput: jsonOutput
-        )
-    }
-    
-    // MARK: - State Management
     
     enum ModelError: LocalizedError {
         case modelNotFound

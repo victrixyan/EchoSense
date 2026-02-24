@@ -36,133 +36,157 @@ struct MainView: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: 24) {
-                // Header: Model Status Indicator
-                HStack(spacing: 12) {
+            VStack(spacing: isRecording ? 10 : 20) {
+                // CONTINUOUS INFERENCE STATUS (No box, minimal)
+                HStack(spacing: 8) {
                     Circle()
-                        .fill(viewModel.modelLoaded ? primaryGreen : Color.orange)
-                        .frame(width: 12, height: 12)
-                        .shadow(color: viewModel.modelLoaded ? primaryGreen.opacity(0.5) : Color.orange.opacity(0.5), radius: 4)
+                        .fill(isRecording ? primaryGreen : primaryGreen.opacity(0.6))
+                        .frame(width: 6, height: 6)
+                        .opacity(isRecording ? 0.8 : 1)
+                        .scaleEffect(isRecording ? 1.2 : 1)
+                        .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: isRecording), value: isRecording)
                     
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("EchoSense")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.black)
-                        
-                        Text(viewModel.modelLoaded ? "Ready" : "Loading model...")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
+                    Text(isRecording ? "Processing audio..." : "Ready for assessment")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                     
                     Spacer()
-                    
-                    Image(systemName: "waveform.circle")
-                        .font(.system(size: 24))
-                        .foregroundColor(primaryGreen)
                 }
-                .padding(16)
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                .padding(.horizontal, 0)
                 
-                // SECTION 1: Agitation Bar (Dynamic, Color-coded, 10s smooth)
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Text("Patient State")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.black)
-                        Spacer()
-                        Text("\(viewModel.agitation)/10")
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundColor(agitationColor(viewModel.agitation))
-                            .animation(.easeInOut(duration: 0.1), value: viewModel.agitation)
-                    }
-                    
-                    // Agitation Bar with Smooth Lerp
-                    ZStack(alignment: .leading) {
-                        // Background track
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray4))
-                            .frame(height: 24)
+                // Header: Model Status Indicator (Hidden while recording)
+                if !isRecording {
+                    HStack(spacing: 12) {
+                        Circle()
+                            .fill(viewModel.modelLoaded ? primaryGreen : Color.orange)
+                            .frame(width: 12, height: 12)
+                            .shadow(color: viewModel.modelLoaded ? primaryGreen.opacity(0.5) : Color.orange.opacity(0.5), radius: 4)
                         
-                        // Gradient fill (calm blue → agitation red)
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        calmnessBlue,
-                                        primaryGreen,
-                                        Color.orange,
-                                        agitationRed
-                                    ]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(24, 280 * CGFloat(viewModel.agitation) / 10.0), height: 24)
-                            .animation(.easeInOut(duration: 10.0), value: viewModel.agitation)
-                        
-                        // Label: Calm ... Agitation
-                        HStack(spacing: 0) {
-                            Text("Calm")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .opacity(0.7)
-                                .padding(.leading, 8)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("EchoSense")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.black)
                             
-                            Spacer()
-                            
-                            Text("Agitation")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .opacity(0.7)
-                                .padding(.trailing, 8)
+                            Text(viewModel.modelLoaded ? "Ready" : "Loading model...")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
                         }
+                        
+                        Spacer()
+                        
+                        Image(systemName: "waveform.circle")
+                            .font(.system(size: 24))
+                            .foregroundColor(primaryGreen)
                     }
-                    .frame(height: 24)
+                    .padding(16)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(16)
                 }
-                .padding(16)
-                .background(Color(.systemGray6))
-                .cornerRadius(12)
+                
+                // SECTION 1: Patient State - Horizontal Progress Bar
+                VStack(alignment: .leading, spacing: isRecording ? 6 : 8) {
+                    Text("Patient State")
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.black)
+                    
+                    HStack(alignment: .center, spacing: isRecording ? 12 : 16) {
+                        // Left: Horizontal Progress Bar
+                        ZStack(alignment: .leading) {
+                            // Background bar
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color(.systemGray4))
+                            
+                            // Progress fill with gradient
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(
+                                    LinearGradient(
+                                        gradient: Gradient(stops: [
+                                            .init(color: primaryGreen, location: 0.0),
+                                            .init(color: Color.yellow, location: 0.5),
+                                            .init(color: agitationRed, location: 1.0)
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .scaleEffect(x: CGFloat(viewModel.agitation) / 10.0, anchor: .leading)
+                                .animation(.easeInOut(duration: 8.0), value: viewModel.agitation)
+                        }
+                        .frame(height: 32)
+                        .frame(maxWidth: .infinity)
+                        
+                        // Right: Score Circle
+                        ZStack {
+                            // Circle background
+                            Circle()
+                                .fill(agitationColor(viewModel.agitation).opacity(0.15))
+                            
+                            // Score text
+                            VStack(spacing: 2) {
+                                Text("\(viewModel.agitation)")
+                                    .font(.system(size: 22, weight: .bold))
+                                    .foregroundColor(agitationColor(viewModel.agitation))
+                                    .animation(.easeInOut(duration: 0.1), value: viewModel.agitation)
+                                Text("/ 10")
+                                    .font(.system(size: 8))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .frame(width: 60, height: 60)
+                    }
+                }
+                .padding(isRecording ? 10 : 12)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color(.systemGray6),
+                            Color(.systemGray6).opacity(0.5)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(16)
+                .shadow(color: Color.black.opacity(0.05), radius: 4, x: 0, y: 2)
                 
                 // SECTION 2: Trend (One phrase, 60s, fade in/out)
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: isRecording ? 3 : 6) {
                     Text("Trend")
-                        .font(.caption)
+                        .font(.system(.subheadline, design: .default))
                         .fontWeight(.semibold)
                         .foregroundColor(.secondary)
                         .textCase(.uppercase)
-                        .tracking(0.5)
+                        .tracking(0.3)
                     
                     Text(viewModel.trend.capitalized)
-                        .font(.title3)
+                        .font(.headline)
                         .fontWeight(.semibold)
                         .foregroundColor(trendColor(viewModel.trend))
                         .lineLimit(2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         .opacity(viewModel.trendFadeOut ? 0 : 1)
                         .animation(.easeInOut(duration: 0.3), value: viewModel.trendFadeOut)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(isRecording ? 8 : 12)
                 .background(trendBgColor(viewModel.trend).opacity(0.1))
-                .cornerRadius(12)
+                .cornerRadius(16)
                 .border(trendColor(viewModel.trend).opacity(0.2), width: 1)
                 
                 // SECTION 3: Keywords (Emotional triggers, context, topics. Max 2-3)
                 if !viewModel.keywords.isEmpty {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: isRecording ? 4 : 6) {
                         Text("Detected Topics")
-                            .font(.caption)
+                            .font(.system(.subheadline, design: .default))
                             .fontWeight(.semibold)
                             .foregroundColor(.secondary)
                             .textCase(.uppercase)
-                            .tracking(0.5)
+                            .tracking(0.3)
                         
-                        FlowLayout(spacing: 8, horizontalSpacing: 8) {
+                        FlowLayout(spacing: isRecording ? 4 : 8, horizontalSpacing: isRecording ? 4 : 8) {
                             ForEach(viewModel.keywords, id: \.self) { keyword in
                                 KeywordPill(
                                     text: keyword,
@@ -174,92 +198,171 @@ struct MainView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
+                    .padding(isRecording ? 8 : 14)
                     .background(primaryGreen.opacity(0.05))
-                    .cornerRadius(12)
+                    .cornerRadius(16)
                     .border(primaryGreen.opacity(0.2), width: 1)
                 }
                 
-                // SECTION 4: Response Prompts (Rolling, 15-20s, fade in/out, escalation override)
+                // SECTION 5: Prediction Guidance (Concise format)
                 if !viewModel.nudges.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Response Suggestions")
-                            .font(.caption)
+                        Text("Guidance")
+                            .font(.headline)
                             .fontWeight(.semibold)
                             .foregroundColor(.secondary)
                             .textCase(.uppercase)
                             .tracking(0.5)
                         
-                        VStack(alignment: .leading, spacing: 8) {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: viewModel.agitation >= 9 ?
+                                  "exclamationmark.triangle.fill" :
+                                  viewModel.agitation >= 7 ?
+                                  "heart.fill" :
+                                  "sparkles")
+                                .font(.system(size: 14))
+                                .foregroundColor(viewModel.agitation >= 9 ? agitationRed : viewModel.agitation >= 7 ? Color.orange : primaryGreen)
+                                .frame(width: 18)
+                            
+                            VStack(alignment: .leading, spacing: 2) {
+                                if viewModel.agitation >= 9 {
+                                    Text("Priority: Safety First")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(agitationRed)
+                                    Text("Assess immediate safety. Use calm presence. Contact care team.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(nil)
+                                } else if viewModel.agitation >= 7 {
+                                    Text("Approach: Validation")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(Color.orange)
+                                    Text("Acknowledge feelings. Offer reassurance. Avoid debate.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(nil)
+                                } else {
+                                    Text("Approach: Engagement")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundColor(primaryGreen)
+                                    Text("Explore interests. Share activities. Build connection.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(nil)
+                                }
+                            }
+                            
+                            Spacer()
+                        }
+                        .padding(10)
+                        .background(Color(.systemGray5).opacity(0.5))
+                        .cornerRadius(12)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(isRecording ? 10 : 12)
+                    .background(Color(.systemGray6).opacity(0.5))
+                    .cornerRadius(16)
+                }
+                
+                Spacer(minLength: isRecording ? 6 : 10)
+                
+                // PATIENT CONTEXT INPUT (Hidden while recording to save space)
+                if !isRecording {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Patient Context")
+                            .font(.system(.subheadline, design: .default))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.secondary)
+                            .textCase(.uppercase)
+                            .tracking(0.3)
+                        
+                        TextEditor(text: $userPrompt)
+                            .frame(height: 70)
+                            .padding(6)
+                            .background(Color(.systemGray6))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(primaryGreen.opacity(0.3), lineWidth: 1)
+                            )
+                            .font(.system(.body, design: .default))
+                    }
+                }
+                
+                // SECTION 4: Response Suggestions (Moved to bottom, above recording button)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Response Suggestions")
+                        .font(.system(.subheadline, design: .default))
+                        .fontWeight(.semibold)
+                        .foregroundColor(.secondary)
+                        .textCase(.uppercase)
+                        .tracking(0.3)
+                    
+                    if !viewModel.nudges.isEmpty {
+                        VStack(alignment: .leading, spacing: isRecording ? 4 : 6) {
                             ForEach(viewModel.nudges, id: \.self) { nudge in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Image(systemName: viewModel.agitation >= 7 ?
+                                HStack(alignment: .top, spacing: 8) {
+                                    Image(systemName: viewModel.agitation >= 9 ?
+                                          "exclamationmark.triangle.fill" :
+                                          viewModel.agitation >= 7 ?
                                           "exclamationmark.circle.fill" :
                                           "lightbulb.fill")
                                         .font(.system(size: 14))
-                                        .foregroundColor(viewModel.agitation >= 7 ? .orange : accentTeal)
+                                        .foregroundColor(viewModel.agitation >= 9 ? agitationRed : viewModel.agitation >= 7 ? .orange : accentTeal)
                                     
                                     Text(nudge)
-                                        .font(.callout)
-                                        .lineLimit(3)
+                                        .font(.headline)
+                                        .lineLimit(nil)
                                         .foregroundColor(.black)
                                     
-                                    Spacer()
+                                    Spacer(minLength: 0)
                                 }
-                                .padding(10)
+                                .padding(8)
                                 .background(
+                                    viewModel.agitation >= 9 ?
+                                    agitationRed.opacity(0.1) :
                                     viewModel.agitation >= 7 ?
                                     Color.orange.opacity(0.1) :
                                     accentTeal.opacity(0.1)
                                 )
-                                .cornerRadius(8)
+                                .cornerRadius(12)
+                                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                                .animation(.easeInOut(duration: 0.5), value: nudge)
+                                .transition(.opacity.combined(with: .scale))
                             }
                         }
+                    } else {
+                        Text("Awaiting first assessment...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .italic()
+                            .padding(6)
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(16)
-                    .background(
-                        viewModel.agitation >= 7 ?
-                        Color.orange.opacity(0.05) :
-                        accentTeal.opacity(0.05)
-                    )
-                    .cornerRadius(12)
-                    .border(
-                        viewModel.agitation >= 7 ?
-                        Color.orange.opacity(0.2) :
-                        accentTeal.opacity(0.2),
-                        width: 1
-                    )
-                    .opacity(viewModel.nudgeFadeOut ? 0 : 1)
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.nudgeFadeOut)
                 }
-                
-                Spacer()
-                
-                // PATIENT CONTEXT INPUT
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Patient Context")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.secondary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                    
-                    TextEditor(text: $userPrompt)
-                        .frame(height: 80)
-                        .padding(8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(primaryGreen.opacity(0.3), lineWidth: 1)
-                        )
-                        .font(.system(.body, design: .default))
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(
+                    viewModel.agitation >= 9 ?
+                    agitationRed.opacity(0.05) :
+                    viewModel.agitation >= 7 ?
+                    Color.orange.opacity(0.05) :
+                    accentTeal.opacity(0.05)
+                )
+                .cornerRadius(16)
+                .border(
+                    viewModel.agitation >= 9 ?
+                    agitationRed.opacity(0.2) :
+                    viewModel.agitation >= 7 ?
+                    Color.orange.opacity(0.2) :
+                    accentTeal.opacity(0.2),
+                    width: 1
+                )
+                .opacity(viewModel.nudgeFadeOut ? 0 : 1)
+                .animation(.easeInOut(duration: 0.3), value: viewModel.nudgeFadeOut)
                 
                 // RECORDING CONTROL BUTTON
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14)
+                    RoundedRectangle(cornerRadius: 16)
                         .fill(
                             LinearGradient(
                                 gradient: Gradient(colors: [
@@ -274,18 +377,13 @@ struct MainView: View {
                     
                     HStack(spacing: 12) {
                         Image(systemName: isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                            .font(.system(size: 22))
+                            .font(.system(size: 26))
                         
                         Text(isRecording ? "Stop Recording" : "Start Recording")
+                            .font(.headline)
                             .fontWeight(.semibold)
                         
                         Spacer()
-                        
-                        if isRecording {
-                            Text(String(format: "%.0f s", recordingDuration))
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                        }
                     }
                     .foregroundColor(.white)
                     .padding(16)
@@ -302,10 +400,10 @@ struct MainView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundColor(.orange)
-                            .font(.caption)
+                            .font(.body)
                         
                         Text(error)
-                            .font(.caption)
+                            .font(.body)
                             .foregroundColor(.orange)
                             .lineLimit(3)
                         
@@ -313,7 +411,7 @@ struct MainView: View {
                     }
                     .padding(12)
                     .background(Color.orange.opacity(0.1))
-                    .cornerRadius(8)
+                    .cornerRadius(12)
                 }
                 
                 // INFERENCE STATUS
@@ -323,19 +421,19 @@ struct MainView: View {
                             .scaleEffect(0.8, anchor: .center)
                         
                         Text("Analyzing audio...")
-                            .font(.caption)
+                            .font(.body)
                             .foregroundColor(.secondary)
                         
                         Spacer()
                     }
                     .padding(12)
                     .background(primaryGreen.opacity(0.1))
-                    .cornerRadius(8)
+                    .cornerRadius(12)
                 }
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
         }
-        .navigationTitle("EchoSense")
         .onAppear {
             requestMicrophonePermission()
         }
@@ -384,6 +482,19 @@ struct MainView: View {
         }
     }
     
+    // MARK: - Agitation Level
+    
+    private func agitationLevel(_ score: Int) -> String {
+        switch score {
+        case 0...2: return "Calm"
+        case 3...4: return "Relaxed"
+        case 5...6: return "Moderate"
+        case 7...8: return "Elevated"
+        case 9...10: return "Critical"
+        default: return "Unknown"
+        }
+    }
+    
     // MARK: - Color Functions
     
     private func agitationColor(_ score: Int) -> Color {
@@ -421,9 +532,46 @@ struct MainView: View {
             return accentTeal
         }
     }
+    
+
 }
 
 // MARK: - Helper Components
+
+struct PredictionExample: View {
+    let icon: String
+    let title: String
+    let prompt: String
+    let backgroundColor: Color
+    let foregroundColor: Color
+    
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundColor(foregroundColor)
+                .frame(width: 20, alignment: .center)
+                .padding(.top, 2)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                
+                Text(prompt)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+            }
+            
+            Spacer()
+        }
+        .padding(10)
+        .background(backgroundColor)
+        .cornerRadius(12)
+    }
+}
 
 struct KeywordPill: View {
     let text: String
@@ -432,66 +580,57 @@ struct KeywordPill: View {
     
     var body: some View {
         Text(text)
-            .font(.caption2)
+            .font(.subheadline)
             .fontWeight(.semibold)
             .lineLimit(1)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(backgroundColor)
             .foregroundColor(foregroundColor)
-            .cornerRadius(6)
+            .cornerRadius(12)
     }
 }
 
-struct FlowLayout: Layout {
+struct FlowLayout<Content: View>: View {
     let spacing: CGFloat
     let horizontalSpacing: CGFloat
+    let content: Content
     
-    func sizeThatFits(
-        proposal: ProposedSize,
-        subviews: Subviews,
-        cache _: inout ()
-    ) -> CGSize {
-        let maxWidth = proposal.width ?? 0
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if width + size.width + horizontalSpacing > maxWidth {
-                width = 0
-                height += lineHeight + spacing
-                lineHeight = 0
-            }
-            width += size.width + horizontalSpacing
-            lineHeight = max(lineHeight, size.height)
-        }
-        
-        height += lineHeight
-        return CGSize(width: maxWidth, height: height)
+    @State private var totalHeight = CGFloat.zero
+    
+    init(spacing: CGFloat = 8, horizontalSpacing: CGFloat = 8, @ViewBuilder content: () -> Content) {
+        self.spacing = spacing
+        self.horizontalSpacing = horizontalSpacing
+        self.content = content()
     }
     
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedSize,
-        subviews: Subviews,
-        cache _: inout ()
-    ) {
-        var x: CGFloat = bounds.minX
-        var y: CGFloat = bounds.minY
-        var lineHeight: CGFloat = 0
-        
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width + horizontalSpacing > bounds.maxX {
-                x = bounds.minX
-                y += lineHeight + spacing
-                lineHeight = 0
+    var body: some View {
+        HStack(alignment: .top, spacing: horizontalSpacing) {
+            content
+        }
+    }
+}
+
+// Helper for creating FlowLayout with array of items
+struct FlowLayoutArray<Item, Content: View>: View {
+    let spacing: CGFloat
+    let horizontalSpacing: CGFloat
+    let items: [Item]
+    let content: (Item) -> Content
+    
+    init(spacing: CGFloat = 8, horizontalSpacing: CGFloat = 8, items: [Item] = [], @ViewBuilder content: @escaping (Item) -> Content) {
+        self.spacing = spacing
+        self.horizontalSpacing = horizontalSpacing
+        self.items = items
+        self.content = content
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                content(item)
+                    .lineLimit(1)
             }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedSize(size))
-            x += size.width + horizontalSpacing
-            lineHeight = max(lineHeight, size.height)
         }
     }
 }
@@ -519,324 +658,24 @@ extension Color {
     }
 }
 
-#Preview {
-    MainView(viewModel: MainViewModel())
-}
-    @StateObject var viewModel: MainViewModel
-    @State var userPrompt: String = ""
-    @State var recordingDuration: String = ""
+// MARK: - Custom Progress Bar Shape (Zero Layout Dependency)
+struct AgitationBarShape: Shape {
+    let progress: CGFloat  // 0.0 to 1.0
+    let cornerRadius: CGFloat = 16
     
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                // Header
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("EchoSense Dementia Risk Assessment")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                    Text("Real-time acoustic analysis with MedGemma-1.5-4b")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                
-                // Model Status
-                HStack {
-                    Image(systemName: viewModel.modelLoaded ? "checkmark.circle.fill" : "circle.fill")
-                        .foregroundColor(viewModel.modelLoaded ? .green : .orange)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Model Status")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                        Text(viewModel.modelLoaded ? "CoreML model loaded" : "Loading model...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding()
-                .background(Color(.systemGray6))
-                .cornerRadius(8)
-                
-                // Patient Prompt Input
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Patient Context")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                    
-                    TextEditor(text: $userPrompt)
-                        .frame(height: 100)
-                        .padding(8)
-                        .background(Color(.systemGray6))
-                        .cornerRadius(6)
-                        .border(Color(.systemGray4), width: 1)
-                        .placeholder(when: userPrompt.isEmpty) {
-                            Text("Enter patient context, prior assessment notes, or clinical observations...")
-                                .foregroundColor(.gray)
-                                .padding(12)
-                        }
-                }
-                
-                // Recording Controls
-                VStack(spacing: 12) {
-                    if viewModel.isProcessing {
-                        HStack(spacing: 12) {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("Processing audio and running inference...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Spacer()
-                        }
-                        .padding()
-                        .background(Color(.systemBlue).opacity(0.1))
-                        .cornerRadius(6)
-                    }
-                    
-                    // Record Button
-                    Button(action: toggleRecording) {
-                        HStack(spacing: 8) {
-                            Image(systemName: viewModel.speechManager.isRecording ? "stop.circle.fill" : "mic.circle.fill")
-                            Text(viewModel.speechManager.isRecording ? "Stop Recording" : "Start Recording")
-                            Spacer()
-                            if viewModel.speechManager.isRecording {
-                                Text(String(format: "%.1f s", viewModel.speechManager.recordingDuration))
-                                    .font(.caption)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity)
-                        .background(viewModel.speechManager.isRecording ? Color.red : Color.blue)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                        .fontWeight(.semibold)
-                    }
-                    .disabled(!viewModel.modelLoaded || viewModel.isProcessing)
-                }
-                
-                // Assessment Result
-                if let result = viewModel.assessmentResult {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            Text("Assessment Result")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                            Spacer()
-                            Text("Time: \(String(format: "%.0f", result.inferenceTimeMs))ms")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                        
-                        // Agitation Score
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Text("Agitation Score")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                Spacer()
-                                Text("\(result.agitation)/10")
-                                    .font(.headline)
-                                    .foregroundColor(agitationColor(result.agitation))
-                            }
-                            
-                            ProgressView(value: Double(result.agitation) / 10.0)
-                                .tint(agitationColor(result.agitation))
-                        }
-                        
-                        // Trend
-                        HStack {
-                            Text("Trend:")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                            Text(result.trend.capitalized)
-                                .font(.caption)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(trendColor(result.trend).opacity(0.2))
-                                .foregroundColor(trendColor(result.trend))
-                                .cornerRadius(4)
-                        }
-                        
-                        // Keywords
-                        if !result.keywords.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Keywords:")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                FlowLayout(spacing: 6) {
-                                    ForEach(result.keywords, id: \.self) { keyword in
-                                        Text(keyword)
-                                            .font(.caption2)
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 4)
-                                            .background(Color(.systemBlue).opacity(0.1))
-                                            .foregroundColor(.blue)
-                                            .cornerRadius(4)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Nudges
-                        if !result.nudges.isEmpty {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("PCDC Nudges:")
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                ForEach(result.nudges, id: \.self) { nudge in
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Image(systemName: "lightbulb.fill")
-                                            .font(.caption)
-                                            .foregroundColor(.orange)
-                                        Text(nudge)
-                                            .font(.caption)
-                                            .lineLimit(3)
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Confidence
-                        HStack {
-                            Text("Confidence:")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                            Text(String(format: "%.0f%%", result.confidence * 100))
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-                    .background(Color(.systemGreen).opacity(0.05))
-                    .border(Color(.systemGreen).opacity(0.2), width: 1)
-                    .cornerRadius(8)
-                }
-                
-                // Error Message
-                if let error = viewModel.errorMessage {
-                    HStack(alignment: .top, spacing: 8) {
-                        Image(systemName: "exclamationmark.circle.fill")
-                            .foregroundColor(.red)
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                        Spacer()
-                    }
-                    .padding()
-                    .background(Color(.systemRed).opacity(0.1))
-                    .cornerRadius(6)
-                }
-                
-                Spacer()
-            }
-            .padding()
-            .navigationTitle("EchoSense")
-        }
-        .onAppear {
-            requestMicrophonePermission()
-        }
-    }
-    
-    // MARK: - Helper Methods
-    
-    private func toggleRecording() {
-        if viewModel.speechManager.isRecording {
-            viewModel.runAssessment(patientPrompt: userPrompt)
-        } else {
-            viewModel.speechManager.startRecording()
-        }
-    }
-    
-    private func requestMicrophonePermission() {
-        viewModel.speechManager.requestMicrophonePermission { granted in
-            if !granted {
-                viewModel.errorMessage = "Microphone access required for recording"
-            }
-        }
-    }
-    
-    private func agitationColor(_ score: Int) -> Color {
-        if score <= 3 {
-            return .green
-        } else if score <= 6 {
-            return .yellow
-        } else {
-            return .red
-        }
-    }
-    
-    private func trendColor(_ trend: String) -> Color {
-        switch trend.lowercased() {
-        case "increasing":
-            return .red
-        case "decreasing":
-            return .green
-        default:
-            return .gray
-        }
-    }
-}
-
-// MARK: - Helper Views
-
-struct FlowLayout: Layout {
-    let spacing: CGFloat
-    
-    func sizeThatFits(proposal: ProposedSize, subviews: Subviews, cache _: inout ()) -> CGSize {
-        let maxWidth = proposal.width ?? 0
-        var width: CGFloat = 0
-        var height: CGFloat = 0
-        var lineHeight: CGFloat = 0
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
         
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if width + size.width + spacing > maxWidth {
-                width = 0
-                height += lineHeight + spacing
-                lineHeight = 0
-            }
-            width += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+        // Calculate fill width based on progress
+        let fillWidth = rect.width * progress
+        
+        // Draw rounded rectangle for fill bar
+        if fillWidth > 0 {
+            let fillRect = CGRect(x: rect.minX, y: rect.minY, width: max(fillWidth, cornerRadius * 2), height: rect.height)
+            path.addRoundedRect(in: fillRect, cornerSize: CGSize(width: cornerRadius, height: cornerRadius))
         }
         
-        height += lineHeight
-        return CGSize(width: maxWidth, height: height)
-    }
-    
-    func placeSubviews(in bounds: CGRect, proposal: ProposedSize, subviews: Subviews, cache _: inout ()) {
-        var x: CGFloat = bounds.minX
-        var y: CGFloat = bounds.minY
-        var lineHeight: CGFloat = 0
-        
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width + spacing > bounds.maxX {
-                x = bounds.minX
-                y += lineHeight + spacing
-                lineHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedSize(size))
-            x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
-        }
-    }
-}
-
-extension View {
-    func placeholder<Content: View>(
-        when shouldShow: Bool,
-        alignment: Alignment = .leading,
-        @ViewBuilder placeholder: () -> Content
-    ) -> some View {
-        ZStack(alignment: alignment) {
-            placeholder().opacity(shouldShow ? 1 : 0)
-            self
-        }
+        return path
     }
 }
 

@@ -28,8 +28,6 @@ xcuserdata/
 .swiftpm/
 .build/
 
-docs/
-
 # 3. OpenSMILE & Libraries
 
 opensmile/
